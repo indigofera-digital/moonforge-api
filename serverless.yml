@@ -1,0 +1,120 @@
+service: moonforge-api
+frameworkVersion: "3"
+
+plugins:
+  - serverless-dynamodb-local
+  - serverless-offline
+
+custom:
+  dynamodb:
+    stages:
+      - dev
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+      # Comment if you don't have a DynamoDB running locally
+      noStart: true
+    migration:
+      dir: offline/migrations
+
+provider:
+  name: aws
+  stage: dev
+  region: eu-west-1
+  deploymentMethod: direct
+  runtime: nodejs14.x
+  memorySize: 512 # optional, in MB, default is 1024
+  timeout: 10 # optional, in seconds, default is 6
+  lambdaHashingVersion: "20201221"
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${sls:stage}
+    ALCHEMY_API_KEY:
+    ETH_NETWORK: goerli
+    PUBLIC_API_URL: https://api.sandbox.x.immutable.com/v1
+    STARK_CONTRACT_ADDRESS: "0x7917eDb51ecD6CdB3F9854c3cc593F33de10c623"
+    REGISTRATION_ADDRESS: "0x1C97Ada273C9A52253f463042f29117090Cd7D83"
+    GAS_LIMIT: 7000000
+    GAS_PRICE: 40000000000
+    PRIVATE_KEY: e463ca2bdc9b315d8e766335434401840010997cc1beeebc4817d5a776cfa28a
+
+  httpApi:
+    cors: true
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${aws:region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+
+functions:
+  createCollection:
+    handler: collections/create-collection.createCollection
+    events:
+      - httpApi:
+          path: /collections
+          method: post
+
+  listCollections:
+    handler: collections/list-collections.listCollections
+    events:
+      - httpApi:
+          path: /collections
+          method: get
+
+  getCollection:
+    handler: collections/get-collection.getCollection
+    events:
+      - httpApi:
+          path: /collections/{id}
+          method: get
+
+  updateCollection:
+    handler: collections/update.update
+    events:
+      - httpApi:
+          path: /collections/{id}
+          method: put
+
+  delete:
+    handler: collections/delete.delete
+    events:
+      - httpApi:
+          path: /collections/{id}
+          method: delete
+
+  openPack:
+    handler: collections/open-pack.openPack
+    events:
+      - httpApi:
+          path: /collections/openPack
+          method: post
+
+
+  forge:
+    handler: collections/forge.forge
+    events:
+      - httpApi:
+          path: /collections/forge
+          method: post
+
+resources:
+  Resources:
+    CollectionsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
